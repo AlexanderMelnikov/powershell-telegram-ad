@@ -12,7 +12,7 @@ $MessageId = $result.result.message.message_id
 $ChatId = $result.result.message.chat.id
 
 # Списпок разрешенных пользователей
-$AllowedChatId = @($ChatID, 'Может быть еще несколько ChatID')
+$AllowedChatId = @($ChatID)
 
 $users = @()
 
@@ -67,28 +67,28 @@ function Send-TelegramMessage($Message, $ChatId){
 
 # Определяем тип сообщения (какая команда)
 function Get-TelegramMessageType($Message){
-    [CmdletBinding()]
-
     # Проверяем что сообщение существует (не пустое)
     if ($Message){
         # Команда должна начинаться на /
         # если это не так - функция остановится
-        if ($response.text[0] -match '/'){
-            return 0
+        if ($Message.text[0] -notmatch '/'){
+            return $Message.message_id, 0
         }
         # убираем знак / из сообщения
-        $text = $response.text -replace '/',''
-        # Если это команда на получение пользователей возвращаем 1
+        $text = $Message.text -replace '/',''
+        # Если это команда на получение пользователей возвращаем
+        # и идентификатор сообщения и его тип
         if ("get_user" -eq $text){
-            return 1
+            return $Message.message_id, 1
         }
         # если строка состоит из числа (например /123)
-        # возвращаем 2
+        # возвращаем идентификатор сообщения, тип сообщения и индекс пользователя
         elseif ($text -match "^\d+$"){
-            return 2
+            return $Message.message_id, 2, $text
         }
-    return $response.message_id
     }
+    # если сообщение пустое
+    return 0, 0
 }
 
 # вечный цикл с таймаутов в 2 секунды
@@ -99,10 +99,11 @@ while ($True){
     # Проверяем тип сообщения
     $message_type = Get-TelegramMessageType -Message $response
     # Т.к. мы поличили новое сообщение - мы должны заменить идентификатор
-    $MessageId = $message_type[0]
+    if ($message_type[0] -ne 0){
+        $MessageId = $message_type[0]
+    }
     # Проверяем тип сообщения
     if ($message_type[1] -eq 1){
-
         # Получаем заблокированных пользователей
         $users = Get-LockedUsers
         if ($users -ne 0){
@@ -121,7 +122,7 @@ while ($True){
     } 
     elseif ($message_type[1] -eq 2){
         # получаем нужного пользователя по индексу
-        $user = $users[$text]
+        $user = $users[$message_type[2]]
         # если значение user существует - значит индекс верный
         # если этого индекса нет - какая-то ошибка или нас
         # пытаются обмануть
